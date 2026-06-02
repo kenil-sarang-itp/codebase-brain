@@ -1,0 +1,58 @@
+# CodeBase Brain — backend Python dependencies.
+#
+# Most versions are pinned for reproducible Docker builds. A few packages are
+# pinned only to a *minimum* on purpose: google-adk constrains fastapi,
+# starlette, and pydantic, so we let pip's resolver pick versions inside the
+# range google-adk allows rather than fighting it with a hard pin.
+
+# --- Web framework & server ---------------------------------------------
+# google-adk 2.0.0 requires fastapi>=0.124.1,<1 — do NOT hard-pin fastapi
+# below that floor or the install will conflict.
+fastapi>=0.124.1,<1.0
+uvicorn[standard]==0.34.0
+# pydantic: google-adk pulls a 2.x; leave the patch version to the resolver.
+pydantic>=2.10,<3.0
+pydantic-settings>=2.7,<3.0
+email-validator==2.2.0
+python-multipart==0.0.20
+
+# --- Authentication ------------------------------------------------------
+# bcrypt is used directly (not via passlib): passlib 1.7.x is unmaintained and
+# incompatible with bcrypt 5.x.
+bcrypt==4.2.1
+PyJWT==2.10.1
+
+# --- Database (PostgreSQL) ----------------------------------------------
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0          # async driver (API)
+psycopg2-binary==2.9.10  # sync driver (workers / migrations)
+
+# --- Job queue -----------------------------------------------------------
+redis==5.2.1
+rq==2.1.0
+
+# --- Vector store --------------------------------------------------------
+qdrant-client==1.12.2
+
+# --- AI: Google ADK + Vertex AI + Cohere --------------------------------
+# google-adk is the dependency that constrains fastapi/starlette/pydantic
+# above; keeping it first makes the intent clear.
+google-adk==2.0.0
+google-genai>=1.9.0
+cohere>=5.13.0,<6.0
+
+# --- Code analysis & chunking -------------------------------------------
+tree-sitter==0.21.3
+tree-sitter-languages==1.10.2
+
+# --- Observability: Arize Phoenix tracing -------------------------------
+arize-phoenix-otel>=0.6.0
+opentelemetry-sdk>=1.29.0
+opentelemetry-exporter-otlp-proto-http>=1.29.0
+openinference-instrumentation-google-genai>=0.1.0
+
+# --- GitHub MCP integration ---------------------------------------------
+mcp>=1.2.0
+
+# --- HTTP client ---------------------------------------------------------
+httpx>=0.28.0

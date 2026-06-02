@@ -1,0 +1,12 @@
+# Keep Docker build contexts small and clean.
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/node_modules/
+frontend/dist/
+.env
+secrets/*.json
+.git/
+**/.DS_Store
+*.md
+!backend/requirements.txt
