@@ -1,5 +1,4 @@
-# CodeBase Brain — infrastructure only (postgres + redis).
-# Backend and worker services will be added once app code is ready.
+# CodeBase Brain — postgres + redis + pgadmin for DB inspection.
 services:
   postgres:
     image: postgres:16-alpine
@@ -14,6 +13,17 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
     restart: unless-stopped
 
   redis:
