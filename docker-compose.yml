@@ -1,4 +1,4 @@
-# CodeBase Brain — postgres + redis + pgadmin for DB inspection.
+# CodeBase Brain — postgres + redis + qdrant + pgadmin.
 services:
   postgres:
     image: postgres:16-alpine
@@ -38,6 +38,21 @@ services:
       retries: 10
     restart: unless-stopped
 
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   redis-data:
+  qdrant-data:
