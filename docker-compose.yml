@@ -1,4 +1,4 @@
-# CodeBase Brain — postgres + redis + qdrant + pgadmin.
+# CodeBase Brain — postgres + redis + qdrant + pgadmin + worker.
 services:
   postgres:
     image: postgres:16-alpine
@@ -50,6 +50,42 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.workers.rq_worker"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-codebrain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codebrain}
+      POSTGRES_DB: ${POSTGRES_DB:-codebrain}
+      REDIS_HOST: redis
+      QDRANT_HOST: qdrant
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GCP_LOCATION: ${GCP_LOCATION:-us-central1}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-sa.json
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.0-flash}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-004}
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
+      REPO_SOURCE: ${REPO_SOURCE:-local}
+      LOCAL_REPO_PATH: /repo
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+    volumes:
+      - ${LOCAL_REPO_MOUNT:-./sample-repo}:/repo:ro
+      - ${GCP_CREDENTIALS_DIR:-./secrets}:/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    deploy:
+      replicas: 2
     restart: unless-stopped
 
 volumes:
