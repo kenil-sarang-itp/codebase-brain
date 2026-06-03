@@ -1,5 +1,23 @@
-# CodeBase Brain — full backend + GitHub MCP. Frontend to be added next.
+# =============================================================================
+# CodeBase Brain — full stack orchestration.
+#
+# Services:
+#   postgres    PostgreSQL — relational store (users, docs, call graph, memory).
+#   redis       Redis      — backs the RQ job queue.
+#   qdrant      Qdrant     — vector store for the knowledge base.
+#   phoenix     Arize Phoenix — tracing UI, in its own container (spec req.).
+#   github-mcp  Official GitHub MCP server — real repository access.
+#   backend     FastAPI API.
+#   worker      RQ workers running the heavy indexing pipeline (scaled x2).
+#   frontend    Nginx serving the React app and proxying /api.
+#
+# Start everything:   docker compose up --build
+# The UI is then at:  http://localhost:8080
+# Phoenix traces at:  http://localhost:6006
+# =============================================================================
+
 services:
+  # --------------------------------------------------------------- postgres
   postgres:
     image: postgres:16-alpine
     environment:
@@ -14,7 +32,7 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
-
+  
   pgadmin:
     image: dpage/pgadmin4:latest
     environment:
@@ -26,6 +44,7 @@ services:
       - postgres
     restart: unless-stopped
 
+  # ------------------------------------------------------------------ redis
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -38,49 +57,66 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # ----------------------------------------------------------------- qdrant
   qdrant:
     image: qdrant/qdrant:v1.12.4
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "6333:6333"    # REST API
+      - "6334:6334"    # gRPC
     volumes:
       - qdrant-data:/qdrant/storage
     healthcheck:
+      # Qdrant exposes a TCP port; a bash /dev/tcp probe avoids extra tools.
       test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
     restart: unless-stopped
 
+  # ---------------------------------------------------------------- phoenix
+  # Arize Phoenix runs as its own container (spec requirement). It receives
+  # OpenTelemetry traces from the API and workers and serves the trace UI.
   phoenix:
     image: arizephoenix/phoenix:latest
     ports:
-      - "6006:6006"
+      - "6006:6006"   # Phoenix UI + OTLP collector
     restart: unless-stopped
 
+  # ------------------------------------------------------------- github-mcp
+  # The official GitHub MCP server, exposing GitHub as MCP tools over HTTP.
+  # Runs in HTTP mode so it stays alive as a long-running service that the
+  # backend worker connects to over the internal Docker network.
+  # The backend's GitHubMCPSource uses GITHUB_MCP_TRANSPORT=http and
+  # connects to http://github-mcp:8080/mcp.
   github-mcp:
     image: ghcr.io/github/github-mcp-server:latest
     environment:
       GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN:-}
+    # HTTP mode: stays running and accepts connections on port 8080.
     command: ["http", "--port", "8080"]
     restart: unless-stopped
 
+  # ----------------------------------------------------------------- backend
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    # Initialise the database schema, then start the API.
     command: >
       sh -c "python -m scripts.init_db &&
              uvicorn app.api.main:app --host 0.0.0.0 --port 8000"
     environment:
+      # --- datastores ---
       POSTGRES_HOST: postgres
       POSTGRES_USER: ${POSTGRES_USER:-codebrain}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codebrain}
       POSTGRES_DB: ${POSTGRES_DB:-codebrain}
       REDIS_HOST: redis
       QDRANT_HOST: qdrant
+      # --- tracing ---
       PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006
       TRACING_ENABLED: ${TRACING_ENABLED:-true}
+      # --- AI providers (blank => offline fallback; app still boots) ---
       GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
       GCP_LOCATION: ${GCP_LOCATION:-us-central1}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
@@ -88,6 +124,7 @@ services:
       LLM_MODEL: ${LLM_MODEL:-gemini-2.0-flash}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-004}
       COHERE_API_KEY: ${COHERE_API_KEY:-}
+      # --- repository source ---
       REPO_SOURCE: ${REPO_SOURCE:-local}
       LOCAL_REPO_PATH: /repo
       GITHUB_REPO: ${GITHUB_REPO:-}
@@ -95,10 +132,13 @@ services:
       GITHUB_MCP_TRANSPORT: ${GITHUB_MCP_TRANSPORT:-http}
       GITHUB_MCP_URL: http://github-mcp:8080/mcp
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-local-webhook-secret}
+      # --- security ---
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8080}
     volumes:
+      # Mount a local repo to index when REPO_SOURCE=local.
       - ${LOCAL_REPO_MOUNT:-./sample-repo}:/repo:ro
+      # Optional GCP service-account key for real Vertex AI.
       - ${GCP_CREDENTIALS_DIR:-./secrets}:/secrets:ro
     ports:
       - "8000:8000"
@@ -109,14 +149,22 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health');\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
     restart: unless-stopped
 
+  # ------------------------------------------------------------------ worker
   worker:
     build:
       context: .
       dockerfile: backend/Dockerfile
     command: ["python", "-m", "app.workers.rq_worker"]
     environment:
+      # Workers need the same configuration as the API.
       POSTGRES_HOST: postgres
       POSTGRES_USER: ${POSTGRES_USER:-codebrain}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codebrain}
@@ -149,8 +197,20 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+    # Run two worker replicas so indexing and PR-sync jobs run in parallel.
     deploy:
       replicas: 2
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
     restart: unless-stopped
 
 volumes:
