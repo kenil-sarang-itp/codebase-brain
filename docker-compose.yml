@@ -1,5 +1,4 @@
-# CodeBase Brain — full backend stack (postgres, redis, qdrant, phoenix, backend, worker).
-# Frontend to be added once React app is ready.
+# CodeBase Brain — full backend + GitHub MCP. Frontend to be added next.
 services:
   postgres:
     image: postgres:16-alpine
@@ -59,6 +58,13 @@ services:
       - "6006:6006"
     restart: unless-stopped
 
+  github-mcp:
+    image: ghcr.io/github/github-mcp-server:latest
+    environment:
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN:-}
+    command: ["http", "--port", "8080"]
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -84,6 +90,11 @@ services:
       COHERE_API_KEY: ${COHERE_API_KEY:-}
       REPO_SOURCE: ${REPO_SOURCE:-local}
       LOCAL_REPO_PATH: /repo
+      GITHUB_REPO: ${GITHUB_REPO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_MCP_TRANSPORT: ${GITHUB_MCP_TRANSPORT:-http}
+      GITHUB_MCP_URL: http://github-mcp:8080/mcp
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-local-webhook-secret}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8080}
     volumes:
@@ -123,6 +134,10 @@ services:
       COHERE_API_KEY: ${COHERE_API_KEY:-}
       REPO_SOURCE: ${REPO_SOURCE:-local}
       LOCAL_REPO_PATH: /repo
+      GITHUB_REPO: ${GITHUB_REPO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_MCP_TRANSPORT: ${GITHUB_MCP_TRANSPORT:-http}
+      GITHUB_MCP_URL: http://github-mcp:8080/mcp
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
     volumes:
       - ${LOCAL_REPO_MOUNT:-./sample-repo}:/repo:ro
