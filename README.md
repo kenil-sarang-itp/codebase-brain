@@ -121,6 +121,7 @@ roles, and the design patterns used — is in
   with a one-line explanation of every file.
 - [`docs/USAGE.md`](docs/USAGE.md) — how developers actually use the app, plus
   the full HTTP API reference.
+- [`docs/Contributions .md`](docs/Contributions%20.md) — 
 
 ---
 
