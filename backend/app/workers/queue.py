@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 QUEUE_NAME = "codebase-brain"
 
 # Generous timeout — a full repo index can legitimately take many minutes.
-_JOB_TIMEOUT = 60 * 60          # 1 hour
+_JOB_TIMEOUT = 60 * 60 * 2       # 2 hour
 _RESULT_TTL = 60 * 60 * 24      # keep results 24h for status inspection
 
 
